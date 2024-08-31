@@ -1,0 +1,16 @@
+  <hr /> <label>Do you want change password?</label>
+    <form id="form_change_pw">
+      <div class="row g-2">
+        <div class="nice-form-group col-md-6 col-sm-12"> 
+          <input name="oldPW" type="password" id="input_oldPW" placeholder="Current password" class="icon-left" />
+        </div>
+        <div class="nice-form-group col-md-6 col-sm-12"> 
+          <input name="newPW" type="password" id="input_newPW" placeholder="New password" class="icon-left" />
+        </div>
+        <div class="d-grid gap-2">
+          <button type="submit" (click)="changePW()" class="btn btn-primary btn_change_pw" type="button" > 
+            Change PW
+          </button>
+        </div>
+       </div>
+    </form>
