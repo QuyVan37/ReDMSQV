@@ -1,0 +1,105 @@
+-- FUNCTION: public.search_mr_by_parameters(text, text, text)
+
+-- DROP FUNCTION IF EXISTS public.search_mr_by_parameters(text, text, text);
+-- select * from search_mr_by_parameters('','','')
+ 
+CREATE OR REPLACE FUNCTION public.search_mr_by_parameters(
+	p_search text DEFAULT NULL::text,
+	p_supplier_id text DEFAULT NULL::integer,
+	p_mr_type_id text DEFAULT NULL::integer)
+    RETURNS TABLE(mr_id integer, mr_no character varying, status character varying, mr_type character varying, model_name text, die_no character varying, part_no character varying, part_name character varying, process_code character varying, clasification character varying, reason character varying, supplier_code character varying, supplier_name character varying, order_to character varying, draw_his character varying, ecn_no character varying, pdd date, request_by character varying, request_date timestamp without time zone, no_of_die_component integer, die_maker character varying, cav_qty integer, mc_size integer, common_part character varying, family_part character varying, budget_code character varying, gl_account character varying, asset_number character varying, location character varying, unit character varying, estimate_cost double precision, die_special character varying, sucess_part_no character varying, sucess_part_name character varying, sucess_die_id character varying, dispose_die_id character varying, is_de_die boolean, make_location character varying, phase character varying, belong character varying, tpi_id character varying, estimate_cost_exchange_usd double precision, app_cost_exchange_usd double precision, pae_check_by character varying, pae_check_date date, pae_app_by character varying, pae_app_date date, plan_check_by character varying, plan_check_date date, plan_app_by character varying, plan_app_date date, pur_check_by character varying, pur_check_date date, pur_app_by character varying, pur_app_date date, note character varying, tpi_nos text) 
+    LANGUAGE 'plpgsql'
+  
+
+AS $BODY$
+BEGIN
+	
+    RETURN QUERY
+    SELECT
+		mr.mr_id, 
+		mr.mr_no, 
+		s.type as status,
+		t.type as type,
+		md.model_name,
+		mr.die_no, 
+		mr.part_no, 
+		mr.part_name, 
+		pr.type as process_code,
+		mr.clasification, 
+		mr.reason,
+		sp.supplier_code,
+		sp.supplier_name,
+		mr.order_to,
+		mr.draw_his,
+		mr.ecn_no,
+		mr.pdd,
+		mr.request_by,
+		mr.request_date,
+		mr.no_of_die_component,
+		mr.die_maker ,
+		mr.cav_qty ,
+		mr.mc_size ,
+		mr.common_part ,
+		mr.family_part ,
+		mr.budget_code , 
+		mr.gl_account ,
+		mr.asset_number ,
+		mr.location ,
+		mr.unit ,
+		mr.estimate_cost ,
+		mr.die_special ,
+		mr.sucess_part_no ,
+		mr.sucess_part_name ,
+		mr.sucess_die_id ,
+		mr.dispose_die_id ,
+		mr.is_de_die ,
+		mr.make_location ,
+		mr.phase ,
+		mr.belong ,
+		mr.tpi_id ,
+		mr.estimate_cost_exchange_usd ,
+		mr.app_cost_exchange_usd ,
+		mr.pae_check_by ,
+		mr.pae_check_date ,
+		mr.pae_app_by , 
+		mr.pae_app_date ,
+		mr.plan_check_by ,
+		mr.plan_check_date ,
+		mr.plan_app_by ,
+		mr.plan_app_date ,
+		mr.pur_check_by ,
+		mr.pur_check_date ,
+		mr.pur_app_by ,
+		mr.pur_app_date ,
+		mr.note,
+		tpi_coverter.tpi_nos
+    FROM mr
+	LEFT JOIN 
+	(
+		SELECT b.tpi_id, b.mr_id, STRING_AGG(a.tpi_no,',') as tpi_nos
+		FROM tpi a
+		JOIN (
+				SELECT mr.tpi_id, mr.mr_id, unnest(STRING_TO_ARRAY(mr.tpi_id,','))::int as ids
+				FROM mr
+				) b ON a.tpi_id = b.ids
+		GROUP BY b.tpi_id, b.mr_id
+	) as tpi_coverter ON tpi_coverter.mr_id = mr.mr_id
+    inner JOIN mr_status_category s ON s.mr_status_id = mr.status_id
+    inner JOIN mr_type_category t ON t.mr_type_id = mr.type_id
+	inner JOIN suppliers sp ON sp.supplier_id = mr.supplier_id 
+	inner Join models md on md.model_id = mr.model_id
+	inner Join die_process_code_category pr ON pr.proces_id = mr.process_code_id
+    WHERE
+        (p_search IS NULL  OR p_search = ''  OR mr.mr_no ILIKE '%' || p_search || '%' 
+			OR mr.die_no ILIKE '%' || p_search || '%'
+			OR 	mr.part_no ILIKE '%' || p_search || '%'
+			OR 	mr.order_to ILIKE '%' || p_search || '%'
+			OR s.type ILIKE  '%' || p_search || '%')
+	AND (p_supplier_id IS NULL OR p_supplier_id = '' OR mr.supplier_id = p_supplier_id::int) 
+	AND (p_mr_type_id IS NULL OR  p_mr_type_id = '' OR mr.type_id = p_mr_type_id::int)
+	ORDER BY mr.request_date DESC ;
+END;
+$BODY$;
+
+ALTER FUNCTION public.search_mr_by_parameters(text, text, text)
+    OWNER TO postgres;
