@@ -103,3 +103,173 @@ $BODY$;
 
 ALTER FUNCTION public.search_mr_by_parameters(text, text, text)
     OWNER TO postgres;
+
+
+
+
+
+
+
+
+-- FUNCTION: public.search_mr_by_parameters(text, text, text)
+
+-- DROP FUNCTION IF EXISTS public.search_po_by_parameters(text, text, text);
+
+--select * from search_po_by_parameters('','','')
+
+CREATE OR REPLACE FUNCTION public.search_po_by_parameters(
+	p_search text DEFAULT NULL::text,
+	p_supplier_id text DEFAULT NULL::integer,
+	p_mr_type_id text DEFAULT NULL::integer)
+    RETURNS TABLE(
+	status character varying, 
+	mr_id integer, 
+	po_id integer, 
+	mr_no character varying, 
+	po_issue_no character varying, 
+	die_no character varying,
+	part_no character varying, 
+	clasification character varying, 
+	mr_type character varying,
+	part_name character varying, 
+	is_temp_po bool,
+	reason_issue_po po_dies.reason_issue_po%type,
+	change_delivery_key po_dies.change_delivery_key%type,
+	cancel_delivery_key po_dies.cancel_delivery_key%type,
+	model_name text, 
+	supplier_code character varying, 
+	supplier_name character varying, 
+	order_to character varying, 
+	vendor_fctry po_dies.vendor_fctry%type,
+	need_register_rate_table_by_part po_dies.need_register_rate_table_by_part%type,
+	process_code character varying, 
+	draw_his character varying,
+	ecn_no character varying, 
+	delivery_date po_dies.delivery_date%type,
+	order_qty int,
+	delivery_location po_dies.delivery_location%type,
+	use_block_code po_dies.use_block_code%type,
+	item_category  po_dies.item_category%type,
+	transport_method po_dies.transport_method%type,
+	container_loading_code po_dies.container_loading_code%type,
+	cav_qty integer,
+	warranty_shot po_dies.warranty_shot%type,
+	trade_condition_p_name po_dies.trade_condition_p_name%type,
+	issue_by po_dies.issue_by%type,
+	issue_date po_dies.issue_date%type,
+	pur_app_by po_dies.pur_app_by%type,
+	pur_app_date po_dies.pur_app_date%type,
+	puc_check_by po_dies.puc_check_by%type,
+	puc_check_date po_dies.puc_check_date%type,
+	puc_double_check_by po_dies.puc_double_check_by%type,
+	puc_double_check_date po_dies.puc_double_check_date%type,
+	pur_app_npis_by po_dies.pur_app_npis_by%type,
+	pur_app_npis_date	 po_dies.pur_app_npis_date%type,
+	podate po_dies.podate%type,
+	price po_dies.price%type,
+	unit character varying,
+	remark po_dies.remark%type,
+	pus_check_by po_dies.pus_check_by%type,
+	pus_check_date po_dies.pus_check_date%type,
+	pus_app_by po_dies.pus_app_by%type,
+	pus_app_date po_dies.pus_app_date%type,
+	payment_date po_dies.payment_date%type)
+	
+    LANGUAGE 'plpgsql'
+  
+
+AS $BODY$
+BEGIN
+	
+    RETURN QUERY
+    SELECT
+		s.status,
+		mr.mr_id,
+		po.po_id,
+		mr.mr_no,
+		po.po_issue_no,
+		mr.die_no,
+		mr.part_no,
+		mr.clasification,
+		t.type as mr_type,
+		mr.part_name,
+		po.temp_po as is_temp_po,
+		po.reason_issue_po,
+		po.change_delivery_key,
+		po.cancel_delivery_key,
+		md.model_name,
+		sp.supplier_code,
+		sp.supplier_name,
+		mr.order_to,
+		po.vendor_fctry,
+		po.need_register_rate_table_by_part,
+		process_code,
+		mr.draw_his,
+		mr.ecn_no,
+		po.delivery_date,
+		po.order_qty,
+		po.delivery_location,
+		po.use_block_code,
+		po.item_category,
+		po.transport_method,
+		po.container_loading_code,
+		mr.cav_qty,
+		po.warranty_shot,
+		po.trade_condition_p_name,
+		po.issue_by,
+		po.issue_date,
+		po.pur_app_by,
+		po.pur_app_date,
+		po.puc_check_by,
+		po.puc_check_date,
+		po.puc_double_check_by,
+		po.puc_double_check_date,
+		po.pur_app_npis_by,
+		po.pur_app_npis_date,
+		po.podate,
+		po.price,
+		mr.unit,
+		po.remark,
+		po.pus_check_by,
+		po.pus_check_date,
+		po.pus_app_by,
+		po.pus_app_date,
+		po.payment_date
+		
+    FROM po_dies po
+	inner Join mr ON po.mr_id = mr.mr_id
+    inner JOIN po_status_category s ON s.po_status_id = po.po_status_id
+    inner JOIN mr_type_category t ON t.mr_type_id = mr.type_id
+	inner JOIN suppliers sp ON sp.supplier_id = mr.supplier_id 
+	inner Join models md on md.model_id = mr.model_id
+	inner Join die_process_code_category pr ON pr.proces_id = mr.process_code_id
+    WHERE
+        (p_search IS NULL  OR p_search = ''  OR mr.mr_no ILIKE '%' || p_search || '%' 
+			OR po.po_issue_no ILIKE '%' || p_search || '%' 
+			OR mr.die_no ILIKE '%' || p_search || '%'
+			OR 	mr.part_no ILIKE '%' || p_search || '%'
+			OR 	mr.order_to ILIKE '%' || p_search || '%'
+			OR t.type ILIKE  '%' || p_search || '%')
+	AND (p_supplier_id IS NULL OR p_supplier_id = '' OR mr.supplier_id = p_supplier_id::int) 
+	AND (p_mr_type_id IS NULL OR  p_mr_type_id = '' OR mr.type_id = p_mr_type_id::int)
+	ORDER BY mr.request_date DESC ;
+END;
+$BODY$;
+
+
+--select * from public.mr_type_category
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
