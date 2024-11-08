@@ -262,6 +262,46 @@ $BODY$;
 
 
 
+-- FUNCTION: public.sumarize_mr_pending()
+
+-- DROP FUNCTION IF EXISTS public.sumarize_mr_pending();
+
+CREATE OR REPLACE FUNCTION public.sumarize_mr_pending(
+	)
+    RETURNS TABLE(status_id integer, dept_res character varying, grade_id_res integer, mr_role_id_res integer, status character varying, qty integer) 
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+    ROWS 1000
+
+AS $BODY$
+		declare
+			rec record;
+			qty int;
+		begin
+			
+			create temp table sum_mr( 
+				status_id int,
+				dept_res varchar(300),
+				grade_id_res int,
+				mr_role_id_res int,
+				status varchar(300),
+				qty int
+			);
+			for rec in select s.mr_status_id,s.dept_res,s.grade_id_res,s.mr_role_id_res, s.type from public.mr_status_category s where order_view is not null order by order_view ASC 
+			loop
+				select count(*) into qty from mr where mr.status_id = rec.mr_status_id and (mr.is_Active is not null or mr.is_active = TRUE );
+				insert into sum_mr (status_id, dept_res, grade_id_res, mr_role_id_res, status, qty)
+				values(rec.mr_status_id,rec.dept_res, rec.grade_id_res, rec.mr_role_id_res, rec.type, qty); 
+			end loop;
+			return query select * from sum_mr;
+				DROP TABLE IF EXISTS sum_mr; 
+		end;
+	
+$BODY$;
+
+ALTER FUNCTION public.sumarize_mr_pending()
+    OWNER TO postgres;
 
 
 
