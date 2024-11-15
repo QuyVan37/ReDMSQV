@@ -1,0 +1,133 @@
+using Microsoft.AspNetCore.Mvc;
+using OfficeOpenXml;
+using static DMSQV_API.Data.DBConnector;
+
+namespace DMSQV_API.Controllers
+{
+    public class WorkInExcel : Controller
+    {
+        public class resultReadExcel
+        {
+            public bool status { set; get; }
+            public string msg { set; get; }
+            public List<Dictionary<string, object>> data { set; get; }
+        }
+
+        public class resultWriteExcel
+        {
+            public bool status { set; get; }
+            public string msg { set; get; }
+            public string fileGuid { set; get; }
+            public string fileName { set; get; }
+            public string contentType { set; get; }
+            
+        }
+
+        public class configColumToWrite
+        {
+            public string Column { set; get; }
+            public string cell { set; get; }
+            public string ColumnTitle { set; get; }
+            public string dataTitle { set; get; }
+        }
+
+        public resultReadExcel readListExcelFile(IFormFile file, int titelRow, int startRow)
+        {
+
+            resultReadExcel result = new resultReadExcel();
+            if (file == null)
+            {
+                result.status = false;
+                result.msg = "No file upload!";
+                return result;
+            }
+
+            if (!Path.GetExtension(file.FileName).Contains(".xls"))
+            {
+                result.status = false;
+                result.msg = "File must excel!";
+                return result;
+            }
+
+            string fileGuid = Guid.NewGuid().ToString();
+            MemoryStream output = new MemoryStream();
+            Object linkdowload = new Object();
+            using (ExcelPackage package = new ExcelPackage(file.OpenReadStream()))
+            {
+                ExcelWorksheet sheet = package.Workbook.Worksheets.First();
+                var start = sheet.Dimension.Start;
+                var end = sheet.Dimension.End;
+                List<Dictionary<string, object>> data = new List<Dictionary<string, object>>();
+
+               
+                for (int row = startRow; row <= end.Row; row++)
+                {
+                    var rowData = new Dictionary<string, object>();
+                    for (int i = 1; i <= end.Column; i++)
+                    {
+                        var title = sheet.Cells[titelRow, i].Text.Trim();
+                        var value = sheet.Cells[row, i].Text.Trim();
+                        rowData.Add(title, value);
+                    }
+                    data.Add(rowData);
+                }
+             
+
+                result.status = true;
+                result.data = data;
+            }
+
+            return result;
+        }
+
+        public resultWriteExcel writeListExcelFile(string pathFullFormExcel, int startRow, int starCol, string[] cols, dataReturn data, HttpContext httpContext)
+        {
+            MemoryStream output = new MemoryStream();
+            string fileGuid = Guid.NewGuid().ToString();
+
+            using (ExcelPackage package = new ExcelPackage(new FileInfo(pathFullFormExcel)))
+            {
+                ExcelWorksheet sheet = package.Workbook.Worksheets.First();
+                int row = startRow;
+                int col = starCol;
+                for (int i = 0; i < data.data.Count; i++)
+                {
+                    var rowData = data.data[i];
+                    for (int j = 0; j < cols.Length ; j++)
+                    {
+                      
+                       sheet.Cells[row, col + j].Value = rowData[cols[j]];
+                    }
+                    row++;
+                }
+
+                package.SaveAs(output);
+            }
+            output.Position = 0;
+            httpContext.Session.Set(fileGuid, output.ToArray());
+            var fileName = Path.GetFileNameWithoutExtension(pathFullFormExcel);
+            var extension = Path.GetExtension(pathFullFormExcel);
+            fileName = fileName + DateTime.Now.ToString("yyyyMMdd HHmmss") + extension;
+            resultWriteExcel result = new resultWriteExcel()
+            {
+                status = true,
+                msg = "",
+                fileGuid = fileGuid,
+                fileName = fileName,
+                contentType = "application/vnd.ms-excel"
+            };
+
+            return result;
+        }
+
+
+
+
+
+
+
+
+
+
+    }
+}
