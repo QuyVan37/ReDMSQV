@@ -1,0 +1,287 @@
+
+using System;
+using DMSQV_API.Data;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Mvc;
+using OfficeOpenXml;
+using System.Net.WebSockets;
+using System.Reflection.Metadata.Ecma335;
+using System.IO;
+using DMSQV_API.Models;
+using Microsoft.Extensions.FileProviders;
+using System.Linq.Expressions;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
+using System.Net.Mime;
+using static DMSQV_API.Controllers.WorkInExcel;
+
+namespace DMSQV_API.Controllers
+{
+    public class Download : Controller
+    {
+
+        DBConnector db = new DBConnector();
+        Authen authen = new Authen();
+        CommonFunction commonFunction = new CommonFunction();
+        WorkInExcel WorkExcel = new WorkInExcel();
+        string currentURLHost = System.IO.Directory.GetCurrentDirectory();
+        public Object MRFORM(int id)
+        {
+            bool status = false;
+            string msg = "dfdfd";
+
+            Object linkdowload = new Object();
+            var userLogin = authen.isLoginAndReturnUserProfile(HttpContext);
+            if (userLogin.status == false)
+            {
+                status = false;
+                msg = "Please login!";
+                goto exit;
+            }
+            bool isHasPermit = userLogin.dataUsers.Any(e => e.mr_role_id > 1);
+            if (isHasPermit == false)
+            {
+                status = false;
+                msg = "You do not has permission!";
+                goto exit;
+            }
+            // PHẦN MAIN
+            string sql = $"SELECT mr.mr_no, t.type, mr.no_of_die_component, mr.is_de_die, mr.make_location, mr.die_no, mr.clasification,mr.budget_code, " +
+                        $"mr.model_name, pr.type proces, mr.gl_account, mr.part_no, spl.supplier_code, mr.asset_number, mr.part_name, mr.order_to, mr.location," +
+                        $" mr.draw_his, mr.cav_qty, mr.unit, mr.ecn_no, mr.mc_size, mr.estimate_cost, mr.pdd, mr.common_part, mr.app_cost, mr.reason," +
+                        $" mr.family_part, mr.die_maker, mr.sucess_die_id, mr.sucess_part_no, mr.sucess_part_name, mr.dispose_die_id, mr.request_by, " +
+                        $"mr.request_date, mr.pae_check_by, mr.pae_check_date,mr.pae_app_by, mr.pae_app_date, mr.plan_check_by, mr.plan_check_date, " +
+                        $"mr.plan_app_by, mr.plan_app_date, mr.pur_check_by, mr.pur_check_date, mr.pur_app_by, mr.pur_app_date, mr.die_special,  mr.status_id, st.type status   " +
+                        $"FROM public.mr " +
+                        $"JOIN public.mr_type_category t ON t.mr_type_id = mr.type_id " +
+                        $"JOIN public.die_process_code_category pr ON pr.proces_id = mr.process_code_id " +
+                        $"JOIN public.mr_status_category st ON st.mr_status_id = mr.status_id " +
+                        $"JOIN public.suppliers spl ON spl.supplier_id = mr.supplier_id " +
+                        $"WHERE mr_id = {id}";
+            var mR = db.ExcuteQueryAndGetData(sql).data[0];
+            string fileGuid = Guid.NewGuid().ToString();
+
+            MemoryStream output = new MemoryStream();
+            var newEffectiveDateVer07 = DateTime.Parse("2000-10-01");
+            var newEffectiveDateVer08 = DateTime.Parse("2023-10-01");
+            var newEffectiveDateVer09 = DateTime.Parse("2030-01-01");
+            int ver = 0;
+            string format = "";
+            var requestDate = DateTime.Parse(mR["request_date"].ToString());
+
+
+            if (requestDate >= newEffectiveDateVer09)
+            {
+                format = "/File/Format/MR/MRFormVer09.xlsx";
+                ver = 9;
+            }
+            else
+            {
+                if (requestDate >= newEffectiveDateVer08)
+                {
+                    format = "/File/Format/MR/MRFormVer08.xlsx";
+                    ver = 8;
+                }
+                else
+                {
+                    format = "/File/Format/MR/MRFormVer07.xlsx";
+                    ver = 7;
+                }
+            }
+            FileInfo FileFormat = new FileInfo(currentURLHost + format);
+            using (ExcelPackage package = new ExcelPackage(FileFormat))
+            {
+
+                ExcelWorksheet sheet = package.Workbook.Worksheets.First();
+                sheet.Cells["E7"].Value = mR["mr_no"] == null ? "-" : mR["mr_no"];
+                if (ver == 7)
+                {
+                    sheet.Cells["K7"].Value = mR["type"] == null ? "-" : mR["type"];
+                    sheet.Cells["R7"].Value = mR["no_of_die_component"] == null ? "-" : mR["no_of_die_component"];
+                    sheet.Cells["Q16"].Value = mR["die_special"] == null ? "-" : mR["die_special"];
+                }
+                if (ver == 8)
+                {
+                    sheet.Cells["I7"].Value = mR["type"] == null ? "-" : mR["type"];
+                    sheet.Cells["M7"].Value = mR["no_of_die_component"] == null ? "-" : mR["no_of_die_component"];
+                    sheet.Cells["Q16"].Value = mR["die_maker"] == null ? "-" : mR["die_maker"];
+                    sheet.Cells["P7"].Value = mR["is_de_die"] == null ? "-" : mR["is_de_die"].Equals(true) ? "Y" : "N";
+                    sheet.Cells["S7"].Value = mR["make_location"] == null ? "-" : mR["make_location"];
+                }
+
+                sheet.Cells["E9"].Value = mR["die_no"];
+                sheet.Cells["E10"].Value = mR["model_name"] == null ? "-" : mR["model_name"];
+                sheet.Cells["E11"].Value = mR["part_no"] == null ? "-" : mR["part_no"];
+                sheet.Cells["E12"].Value = mR["part_name"] == null ? "-" : mR["part_name"];
+                sheet.Cells["E13"].Value = mR["draw_his"] == null ? "-" : mR["draw_his"];
+                sheet.Cells["E14"].Value = mR["ecn_no"] == null ? "-" : mR["ecn_no"];
+                sheet.Cells["E15"].Value = !String.IsNullOrEmpty(mR["pdd"].ToString()) ? String.Format("{0:yyyy/MM/dd}", mR["pdd"]) : "-";
+                sheet.Cells["E16"].Value = mR["reason"];
+                sheet.Cells["K9"].Value = mR["clasification"];
+                sheet.Cells["K10"].Value = mR["proces"];
+                sheet.Cells["K11"].Value = mR["supplier_code"] == null ? "-" : mR["supplier_code"];
+                sheet.Cells["K12"].Value = mR["order_to"] == null ? "-" : mR["order_to"];
+                sheet.Cells["K13"].Value = mR["cav_qty"] == null ? "-" : mR["cav_qty"];
+                sheet.Cells["K14"].Value = mR["mc_size"] == null ? "-" : mR["mc_size"];
+                sheet.Cells["K15"].Value = mR["common_part"];
+                sheet.Cells["K16"].Value = mR["family_part"];
+                sheet.Cells["Q9"].Value = mR["budget_code"] == null ? "-" : mR["budget_code"];
+                sheet.Cells["Q10"].Value = mR["gl_account"];
+                sheet.Cells["Q11"].Value = mR["asset_number"];
+                sheet.Cells["Q12"].Value = mR["location"];
+                sheet.Cells["Q13"].Value = mR["unit"];
+                sheet.Cells["Q14"].Value = mR["estimate_cost"];
+                sheet.Cells["Q15"].Value = mR["app_cost"];
+
+
+                sheet.Cells["G21"].Value = mR["sucess_die_id"] == null ? "-" : mR["sucess_die_id"];
+                sheet.Cells["G22"].Value = mR["sucess_part_no"] == null ? "-" : mR["sucess_part_no"];
+                sheet.Cells["G23"].Value = mR["sucess_part_name"] == null ? "-" : mR["sucess_part_name"];
+
+                sheet.Cells["G23"].Value = mR["dispose_die_id"] == null ? "-" : mR["dispose_die_id"];
+
+                sheet.Cells["D29"].Value = mR["request_by"] == null ? "-" : mR["request_by"];
+                sheet.Cells["D32"].Value = !String.IsNullOrEmpty(mR["request_date"].ToString()) ? String.Format("{0:yyyy/MM/dd}", mR["request_date"]) : "-";
+
+                // Neu MR Cancle || Reject  thi ko dien thong tin check va App
+                if (mR["status_id"].Equals(12) || mR["status_id"].Equals(11))
+                {
+                    var MRstatus = mR["status"].ToString();
+                    sheet.Cells["F29"].Value = "Was " + MRstatus;
+                    sheet.Cells["F32"].Value = "";
+
+                    sheet.Cells["H29"].Value = "Was " + MRstatus;
+                    sheet.Cells["H32"].Value = "";
+
+                    sheet.Cells["J29"].Value = "Was " + MRstatus;
+                    sheet.Cells["J32"].Value = "";
+
+                    sheet.Cells["L29"].Value = "Was " + MRstatus;
+                    sheet.Cells["L32"].Value = "";
+
+                    sheet.Cells["O29"].Value = "Was " + MRstatus;
+                    sheet.Cells["O32"].Value = "";
+
+                    sheet.Cells["R29"].Value = "Was " + MRstatus;
+                    sheet.Cells["R32"].Value = "";
+                }
+                else
+                {
+                    sheet.Cells["F29"].Value = mR["pae_check_by"] == null ? "-" : mR["pae_check_by"];
+                    sheet.Cells["F32"].Value = !String.IsNullOrEmpty(mR["pae_check_date"].ToString()) ? String.Format("{0:yyyy/MM/dd}", mR["pae_check_date"]) : "-";
+
+                    sheet.Cells["H29"].Value = mR["pae_app_by"] == null ? "-" : mR["pae_app_by"];
+                    sheet.Cells["H32"].Value = !String.IsNullOrEmpty(mR["pae_app_date"].ToString()) ? String.Format("{0:yyyy/MM/dd}", mR["pae_app_date"]) : "-";
+
+                    sheet.Cells["J29"].Value = mR["plan_check_by"] == null ? "-" : mR["plan_check_by"];
+                    sheet.Cells["J32"].Value = !String.IsNullOrEmpty(mR["plan_check_date"].ToString()) ? String.Format("{0:yyyy/MM/dd}", mR["plan_check_date"]) : "-";
+
+                    sheet.Cells["L29"].Value = mR["plan_app_by"] == null ? "-" : mR["plan_app_by"];
+                    sheet.Cells["L32"].Value = !String.IsNullOrEmpty(mR["plan_app_date"].ToString()) ? String.Format("{0:yyyy/MM/dd}", mR["plan_app_date"]) : "-";
+
+                    sheet.Cells["O29"].Value = mR["pur_check_by"] == null ? "-" : mR["pur_check_by"];
+                    sheet.Cells["O32"].Value = !String.IsNullOrEmpty(mR["pur_check_date"].ToString()) ? String.Format("{0:yyyy/MM/dd}", mR["pur_check_date"]) : "-";
+
+                    sheet.Cells["R29"].Value = mR["pur_app_by"] == null ? "-" : mR["pur_app_by"];
+                    sheet.Cells["R32"].Value = !String.IsNullOrEmpty(mR["pur_app_date"].ToString()) ? String.Format("{0:yyyy/MM/dd}", mR["pur_app_date"]) : "-";
+                }
+
+                sheet.Protection.IsProtected = true;
+                sheet.Protection.SetPassword("DMSPROTECTION");
+                package.SaveAs(output);
+            }
+
+            output.Position = 0;
+            status = true;
+            linkdowload = new
+            {
+                fileGuid = fileGuid,
+                fileName = mR["mr_no"] + ".xlsx",
+                contentType = "application/vnd.ms-excel"
+
+            };
+            HttpContext.Session.Set(fileGuid, output.ToArray());
+
+
+        exit:
+            var outputData = new
+            {
+                status = status,
+                msg = msg,
+                linkdowload = linkdowload
+            };
+
+            return Json(outputData);
+
+        }
+
+
+        public Object ListMR(string search, string? supplier_id, string? mr_type_id)
+        {
+
+            var form = currentURLHost + "/File/Format/MR/MR_Control_List.xlsx";
+            string[] cols = {"mr_no","mr_type",  "no_of_die_component",  "die_no",   "model_name",   "part_no",  "part_name",
+                "draw_his", "ecn_no",   "pdd",  "reason",   "clasification",    "process_code",  "supplier_code",  "die_maker",
+                "cav_qty",  "mc_size",  "common_part",  "family_part",  "budget_code",  "gl_account",   "asset_number", "location",
+                "unit", "estimate_cost",    "die_special",  "sucess_part_no",   "sucess_part_name", "sucess_die_id",   "dispose_die_id",
+                "is_de_die",    "order_to", "make_location",    "phase",    "status",   "belong",   "tpi_nos",   "estimate_cost_exchange_usd",
+                "app_cost_exchange_usd",    "request_by",   "request_date", "pae_check_by", "pae_check_date",   "pae_app_by",   "pae_app_date",
+                "plan_check_by",    "plan_check_date",  "plan_app_by",  "plan_app_date",    "pur_check_by", "pur_check_date",   "pur_app_by",
+                "pur_app_date", "note",
+                };
+
+            string sqlSearchMR = $"SELECT * FROM search_mr_by_parameters('{search}','{supplier_id}','{mr_type_id}')";
+            var data = db.ExcuteQueryAndGetData(sqlSearchMR);
+
+          var result =  WorkExcel.writeListExcelFile(form, 8,2, cols, data, HttpContext);
+            var output = new
+            {
+                data = result
+            };
+            return output;
+        }
+
+
+
+
+        public virtual ActionResult FileDownload(string fileGuid, string contentType, string fileName, string pathFullFile)
+        {
+            try
+            {
+                if (fileGuid != null)
+                {
+                    var file = HttpContext.Session.Get(fileGuid);
+                    byte[] fileBytes = file as byte[];
+                    HttpContext.Session.Remove(fileGuid);
+                    return File(fileBytes, contentType, fileName);
+                }
+                else
+                {
+                    byte[] fileBytes = System.IO.File.ReadAllBytes(currentURLHost + pathFullFile);
+                    string newFileName = Path.GetFileName(pathFullFile);
+                    return File(fileBytes, "application/force-download", newFileName);
+                }
+
+            }
+            catch
+            {
+
+                return new EmptyResult();
+            }
+        }
+
+
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
