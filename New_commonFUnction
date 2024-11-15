@@ -1,0 +1,323 @@
+using DMSQV_API.Data;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Formatters;
+using System.Linq;
+using System.Text.RegularExpressions;
+
+namespace DMSQV_API.Controllers
+{
+    public class CommonFunction : Controller
+    {
+        string currentURLHost = System.IO.Directory.GetCurrentDirectory();
+        DBConnector db = new DBConnector();
+        public class ACC_Info
+        {
+            public string G_L { set; get; }
+            public string location { set; get; }
+            public string assetNumber { set; get; }
+        }
+
+        public class jsonResult
+        {
+            public bool status { set; get; }
+            public string msg { set; get; }
+            public object data { set; get; }
+        }
+        public class exchangeMoneyToVND_USD_JPY
+        {
+            public double VND { set; get; }
+            public double USD { set; get; }
+            public double JPY { set; get; }
+            public double rateVNDtoUSD { set; get; }
+            public double rateJPYtoUSD { set; get; }
+        }
+
+        public bool checkArrayHasAnyElementNullOrEmpty<T>(T[] array)
+        {
+            if ((array == null || array.Length == 0))
+            {
+                return true;
+            }
+            else
+            {
+                return array.Any(item => item == null);
+            }
+
+        }
+
+        public string savePhysicalFileOnServer(IFormFile file, string pathFolder, string fileName)
+        {
+            // return path file
+            // pathFolder = "/File/Folder1/.../"
+            string outputFullPath = "";
+            if (file == null)
+            {
+                outputFullPath = "";
+                goto exit;
+            }
+            fileName = fileName + DateTime.Now.ToString("yyyyMMdd HH-mm-ss") + Path.GetExtension(file.FileName);
+            outputFullPath = Path.Combine(pathFolder, fileName);
+
+            try
+            {
+
+                using (var stream = new FileStream(currentURLHost + outputFullPath, FileMode.Create))
+                {
+                    file.CopyTo(stream);
+                }
+            }
+            catch (Exception ex)
+            {
+                outputFullPath = "";
+            }
+        exit:
+            return outputFullPath;
+        }
+
+        public ACC_Info genarateACCInfo(int mr_Type_id, double price, string unit, string belong, string ModelColorOrMono, string supplierCode, string partNo)
+        {
+            ACC_Info acc = new ACC_Info();
+            bool isNeedCapitalBudget = isNeedCapitalBugdet(mr_Type_id, price, unit);
+            // 1.GL Account:
+            //Nếu X7  => A214-307800-3120-3200
+            if (mr_Type_id == 8) //X7-Repair
+            {
+
+                if (belong.Contains("CRG")) // CRG
+                {
+                    acc.G_L = "A214-307800-4850";
+                }
+                else // LBP
+                {
+                    acc.G_L = "A214-307800-3120";
+                }
+            }
+            else
+            {
+                if (isNeedCapitalBudget == true) // Nếu khác X7 và price >30trVND => 2170-001000
+                {
+                    acc.G_L = "2170-001000";
+                }
+                else// Other(else) => A212-103000-3120-3200
+                {
+                    if (belong.Contains("CRG")) // CRG
+                    {
+                        acc.G_L = "A212-103000-4850";
+                    }
+                    else // LBP
+                    {
+                        acc.G_L = "A212-103000-3120";
+                    }
+                }
+                if (price == 10)
+                {
+                    acc.G_L = "-";
+                }
+            }
+
+            // 2. Location
+            // nếu Inhouse (Code: 5400 || 5500)
+            if (!String.IsNullOrEmpty(ModelColorOrMono))
+            {
+                var Inhouse = new string[] { "5400", "5500", "3400", "3500" };
+                if (Inhouse.Contains(supplierCode))
+                {
+                    if (belong.Contains("CRG")) // CRG
+                    {
+                        acc.location = "963-CRG";
+                    }
+                    else // LBP
+                    {
+                        if (ModelColorOrMono.ToUpper().Contains("MONO"))
+                        {
+                            acc.location = "964-MONO";
+                        }
+                        else
+                        {
+                            acc.location = "965-COLOR";
+                        }
+                    }
+
+                }
+                else
+                {
+                    if (belong.Contains("CRG")) // CRG
+                    {
+                        acc.location = "964-CRG";
+                    }
+                    else // LBP
+                    {
+                        if (ModelColorOrMono.ToUpper().Contains("MONO"))
+                        {
+                            acc.location = "961-MONO";
+                        }
+                        else
+                        {
+                            acc.location = "963-COLOR";
+                        }
+                    }
+
+                }
+            }
+            else
+            {
+                acc.location = "-";
+            }
+
+
+            // 3.AssetNumber
+            string first2LeterOfPartNo = partNo.Substring(0, 2);
+
+            if (new string[] { "RX", "FX", "RJ" }.Contains(first2LeterOfPartNo)) // Packing part
+            {
+                acc.assetNumber = "08140P";
+            }
+            else
+            {
+                acc.assetNumber = "08110P";
+            }
+
+            return acc;
+
+        }
+
+        public bool isNeedCapitalBugdet(int mr_Type_id, double price, string unit)
+        {
+            bool isNeed = false;
+            if (mr_Type_id == 8) // X7
+            {
+                isNeed = false;
+                goto exit;
+            }
+            var exchageValue = ExchangeVNDandJPYUSD(price, unit);
+            if (exchageValue.VND > 30000000)
+            {
+                isNeed = true;
+            }
+
+        exit:
+            return isNeed;
+        }
+
+        public exchangeMoneyToVND_USD_JPY ExchangeVNDandJPYUSD(double amount, string unit)
+        {
+            unit = unit?.Replace(" ", "").Trim().ToUpper();
+            string sqlGetExchangeRate = $"SELECT * from exchange_rate where exchange_id in (select max(exchange_id) from exchange_rate)";
+            var exchangeRate = db.ExcuteQueryAndGetData(sqlGetExchangeRate).data[0];
+
+            exchangeMoneyToVND_USD_JPY output = new exchangeMoneyToVND_USD_JPY();
+            output.rateVNDtoUSD = double.Parse(exchangeRate["rate_vnd_to_usd"].ToString());
+            output.rateJPYtoUSD = double.Parse(exchangeRate["rate_jpy_to_usd"].ToString());
+            if (unit == "VND")
+            {
+                output.VND = amount;
+                output.USD = amount / output.rateVNDtoUSD;
+                output.JPY = amount / output.rateVNDtoUSD * output.rateJPYtoUSD;
+            }
+            if (unit == "USD")
+            {
+                output.VND = amount * output.rateVNDtoUSD;
+                output.USD = amount;
+                output.JPY = amount * output.rateJPYtoUSD;
+            }
+            if (unit == "JPY")
+            {
+                output.VND = amount / output.rateJPYtoUSD * output.rateVNDtoUSD;
+                output.USD = amount / output.rateJPYtoUSD;
+                output.JPY = amount;
+            }
+            return output;
+        }
+
+        public int createModel(string model_Name)
+        {
+            int model_id = 0;
+            model_Name = model_Name.Trim().ToUpper();
+            string sqlChecExistModel = $"SELECT model_id FROM models WHERE model_name ilike '%{model_Name}%'";
+            var checkExist = db.ExcuteQueryAndGetData(sqlChecExistModel).data;
+            if (checkExist.Count > 0)
+            {
+                model_id = int.Parse(checkExist[0]["model_id"].ToString());
+            }
+            else
+            {
+                string sql = $"INSERT INTO models (model_name, phase, issue_date, is_active)  " +
+               $"VALUES('{model_Name}','MT', '{DateTime.Now}', true ) " +
+               $"ON CONFLICT ({model_Name}) " +
+               $"DO UPDATE SET Model_name = '{model_Name}'  " +
+               $"RETURNING model_id";
+
+                model_id = int.Parse(db.ExcuteQueryAndGetData(sql).data[0]["model_id"].ToString());
+            }
+
+            return model_id;
+        }
+
+        public int genarateMRtypeID(string dim)
+        {
+            // Neu thay doi logic thi phai thay doi trong file mr.component.ts cua front end
+
+            int mr_type_id = 0;
+            if (dim == null)
+            {
+                return mr_type_id;
+            }
+            dim = dim?.ToUpper().Trim();
+            string last2leterOfDim = dim?.Substring(1, 2);
+
+            if (dim == "11A")
+            {
+                mr_type_id = 1;
+            }
+            if (dim[0] != '1' && last2leterOfDim == "1A")
+            {
+                mr_type_id = 2;
+            }
+            if (last2leterOfDim == "2A")
+            {
+                mr_type_id = 3;
+            }
+            if (last2leterOfDim == "3A")
+            {
+                mr_type_id = 4;
+            }
+            if (dim[1] == '4')
+            {
+                mr_type_id = 5;
+            }
+            if (dim[1] == '5')
+            {
+                mr_type_id = 6;
+            }
+            if (dim[1] == '6')
+            {
+                mr_type_id = 7;
+            }
+            if (dim[1] == '7')
+            {
+                mr_type_id = 8;
+            }
+            if (dim[1] == '8')
+            {
+                mr_type_id = 9;
+            }
+            if (dim[1] == '9')
+            {
+                mr_type_id = 10;
+            }
+            return mr_type_id;
+        }
+
+        public int? getNummberInString(string str_num)
+        {
+
+            string numbersOnly = Regex.Replace(str_num, "[^0-9]", "");
+            int num = 0;
+            bool isNum = int.TryParse(numbersOnly, out num);
+            int? result = isNum ? num : new Nullable<Int32>();
+            return result;
+
+        }
+
+    }
+}
