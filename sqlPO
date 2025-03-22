@@ -1,0 +1,153 @@
+-- FUNCTION: public.get_list_po_after_search(text, text, text, text, text, integer, integer)
+
+-- DROP FUNCTION IF EXISTS public.get_list_po_after_search(text, text, text, text, text, integer, integer);
+-- select * from get_list_po_after_search()
+CREATE OR REPLACE FUNCTION public.get_list_po_after_search(
+	p_search text DEFAULT NULL::text,
+	p_supplier_id text DEFAULT NULL::integer,
+	p_mr_type_id text DEFAULT NULL::integer,
+	p_dept_res text DEFAULT NULL::text,
+	p_po_role_id text DEFAULT NULL::integer,
+	p_page_number integer DEFAULT 1,
+	p_page_size integer DEFAULT 10)
+    RETURNS TABLE(status character varying, mr_id integer, po_id integer, mr_no character varying, po_issue_no character varying, die_no character varying, part_no character varying, clasification character varying, mr_type character varying, part_name character varying, is_temp_po boolean, reason_issue_po text, change_delivery_key character varying, cancel_delivery_key character varying, model_name text, supplier_code character varying, supplier_name character varying, order_to character varying, vendor_fctry character varying, need_register_rate_table_by_part character varying, process_code character varying, draw_his character varying, ecn_no character varying, delivery_date date, order_qty integer, delivery_location character varying, use_block_code character varying, item_category character varying, transport_method character varying, container_loading_code character varying, cav_qty integer, warranty_shot integer, trade_condition_p_name character varying, issue_by character varying, issue_date timestamp without time zone, pur_app_by character varying, pur_app_date timestamp without time zone, puc_check_by character varying, puc_check_date timestamp without time zone, puc_double_check_by character varying, puc_double_check_date timestamp without time zone, pur_app_npis_by character varying, pur_app_npis_date timestamp without time zone, podate date, price double precision, unit character varying, remark text, pus_check_by character varying, pus_check_date timestamp without time zone, pus_app_by character varying, pus_app_date timestamp without time zone, payment_date date, po_status_id int, po_status_id_before_change_or_cancel int, status_before_change_cancel character varying, total_count integer) 
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+    ROWS 1000
+
+AS $BODY$
+	
+DECLARE
+    offset_value INTEGER;
+    total_count INTEGER;
+	
+BEGIN
+   	SELECT COUNT(*) INTO total_count
+  	FROM search_po_by_parameters(p_search, p_supplier_id, p_mr_type_id, p_dept_res, p_po_role_id);
+
+	RETURN QUERY
+    SELECT mr.*, total_count
+    FROM (
+        SELECT *
+        FROM search_po_by_parameters(p_search, p_supplier_id, p_mr_type_id, p_dept_res, p_po_role_id)
+    ) AS mr
+    Limit P_PAGE_SIZE::int
+	Offset (P_PAGE_NUMBER::int -1)*P_PAGE_SIZE::int ;  
+   
+END;
+$BODY$;
+
+ALTER FUNCTION public.get_list_po_after_search(text, text, text, text, text, integer, integer)
+    OWNER TO postgres;
+
+
+
+
+
+
+
+-- FUNCTION: public.search_po_by_parameters(text, text, text, text, text)
+
+-- DROP FUNCTION IF EXISTS public.search_po_by_parameters(text, text, text, text, text);
+--select * from search_po_by_parameters()
+CREATE OR REPLACE FUNCTION public.search_po_by_parameters(
+	p_search text DEFAULT NULL::text,
+	p_supplier_id text DEFAULT NULL::integer,
+	p_mr_type_id text DEFAULT NULL::integer,
+	p_dept_res text DEFAULT NULL::text,
+	p_po_role_id text DEFAULT NULL::integer)
+    RETURNS TABLE(status character varying, mr_id integer, po_id integer, mr_no character varying, po_issue_no character varying, die_no character varying, part_no character varying, clasification character varying, mr_type character varying, part_name character varying, is_temp_po boolean, reason_issue_po text, change_delivery_key character varying, cancel_delivery_key character varying, model_name text, supplier_code character varying, supplier_name character varying, order_to character varying, vendor_fctry character varying, need_register_rate_table_by_part character varying, process_code character varying, draw_his character varying, ecn_no character varying, delivery_date date, order_qty integer, delivery_location character varying, use_block_code character varying, item_category character varying, transport_method character varying, container_loading_code character varying, cav_qty integer, warranty_shot integer, trade_condition_p_name character varying, issue_by character varying, issue_date timestamp without time zone, pur_app_by character varying, pur_app_date timestamp without time zone, puc_check_by character varying, puc_check_date timestamp without time zone, puc_double_check_by character varying, puc_double_check_date timestamp without time zone, pur_app_npis_by character varying, pur_app_npis_date timestamp without time zone, podate date, price double precision, unit character varying, remark text, pus_check_by character varying, pus_check_date timestamp without time zone, pus_app_by character varying, pus_app_date timestamp without time zone, payment_date date, po_status_id int, po_status_id_before_change_or_cancel int, status_before_change_cancel character varying) 
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE PARALLEL UNSAFE
+    ROWS 1000
+
+AS $BODY$
+BEGIN
+	
+    RETURN QUERY
+    SELECT
+		s.status,
+		mr.mr_id,
+		po.po_id,
+		mr.mr_no,
+		po.po_issue_no,
+		mr.die_no,
+		mr.part_no,
+		mr.clasification,
+		t.type as mr_type,
+		mr.part_name,
+		po.temp_po as is_temp_po,
+		po.reason_issue_po,
+		po.change_delivery_key,
+		po.cancel_delivery_key,
+		md.model_name,
+		sp.supplier_code,
+		sp.supplier_name,
+		mr.order_to,
+		po.vendor_fctry,
+		po.need_register_rate_table_by_part,
+		process_code,
+		mr.draw_his,
+		mr.ecn_no,
+		po.delivery_date,
+		po.order_qty,
+		po.delivery_location,
+		po.use_block_code,
+		po.item_category,
+		po.transport_method,
+		po.container_loading_code,
+		mr.cav_qty,
+		po.warranty_shot,
+		po.trade_condition_p_name,
+		po.issue_by,
+		po.issue_date,
+		po.pur_app_by,
+		po.pur_app_date,
+		po.puc_check_by,
+		po.puc_check_date,
+		po.puc_double_check_by,
+		po.puc_double_check_date,
+		po.pur_app_npis_by,
+		po.pur_app_npis_date,
+		po.podate,
+		po.price,
+		mr.unit,
+		po.remark,
+		po.pus_check_by,
+		po.pus_check_date,
+		po.pus_app_by,
+		po.pus_app_date,
+		po.payment_date,
+		po.po_status_id,
+		po.po_status_id_before_change_or_cancel,
+		s2.status as status_before_change_cancel
+		
+    FROM po_dies po 
+	inner Join mr ON po.mr_id = mr.mr_id
+    inner JOIN po_status_category s ON s.po_status_id = po.po_status_id
+    inner JOIN po_status_category s2 ON s2.po_status_id = po.po_status_id_before_change_or_cancel
+    inner JOIN mr_type_category t ON t.mr_type_id = mr.type_id
+	inner JOIN suppliers sp ON sp.supplier_id = mr.supplier_id 
+	inner Join models md on md.model_id = mr.model_id
+	inner Join die_process_code_category pr ON pr.proces_id = mr.process_code_id
+    WHERE
+        (p_search IS NULL  OR p_search = ''  OR mr.mr_no ILIKE '%' || p_search || '%' 
+			OR po.po_issue_no ILIKE '%' || p_search || '%' 
+			OR mr.die_no ILIKE '%' || p_search || '%'
+			OR 	mr.part_no ILIKE '%' || p_search || '%'
+			OR 	mr.order_to ILIKE '%' || p_search || '%'
+			OR 	s.status ILIKE '%' || p_search || '%'
+			OR t.type ILIKE  '%' || p_search || '%')
+	AND (p_supplier_id IS NULL OR p_supplier_id = '' OR mr.supplier_id = p_supplier_id::int) 
+	AND (p_mr_type_id IS NULL OR  p_mr_type_id = '' OR mr.type_id = p_mr_type_id::int)
+	AND (p_dept_res IS NULL OR  p_dept_res = '' OR s.dept_res ilike '%'|| p_dept_res ||'%')
+	AND (p_po_role_id IS NULL OR  p_po_role_id = '' OR s.po_role_id_res = p_po_role_id::int)
+	AND (po.is_active IS NULL OR po.is_active = true )
+	ORDER BY mr.request_date DESC ;
+END;
+$BODY$;
+
+ALTER FUNCTION public.search_po_by_parameters(text, text, text, text, text)
+    OWNER TO postgres;
